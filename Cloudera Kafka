@@ -1,0 +1,100 @@
+
+##########################################
+             Cloudera Kafka
+##########################################
+
+
+kafka-topics --zookeeper ip-172-31-56-244.us-west-2.compute.internal:2181/kafka --create --topic
+mytopic1 --partitions 3 --replication-factor 3
+
+
+kafka-console-producer --bootstrap-server ip-172-31-57-159.us-west-2.compute.internal:9092 --
+topic mytopic1
+
+kafka-console-consumer --bootstrap-server ip-172-31-57-159.us-west-2.compute.internal:9092 --
+topic mytopic1 --from-beginning
+
+kafka-topics --zookeeper ip-172-31-56-244.us-west-2.compute.internal:2181/kafka --describe
+
+kafka-producer-perf-test --producer-props bootstrap.servers=ip-172-31-57-159.us-west2.compute.internal:9092 --topic mytopic3 --throughput -1 --record-size 1000 --num-records 500000
+
+############ Cruise Control ############
+
+---** Create topic and populate data **---
+
+kafka-topics --bootstrap-server ip-172-31-57-159.us-west-2.compute.internal:9092 --create --topic
+cruise-control-topic --replication-factor 3 --partitions 25
+
+kafka-producer-perf-test --producer.config producer.properties --topic cruise-control-topic --
+throughput -1 --record-size 1000 --num-records 5000000
+
+---** Adding a Broker **---
+
+>> Add broker in Cloudera
+
+>> Check status from Cruise Control
+
+curl -X GET http://ip-172-31-0-192.us-west2.compute.internal:8899/kafkacruisecontrol/kafka_cluster_state
+
+
+>> Rebalance load on new Broker
+
+curl -X POST 'http://ip-172-31-0-192.us-west2.compute.internal:8899/kafkacruisecontrol/add_broker?brokerid=1546334556'
+
+curl -X GET http://ip-172-31-0-192.us-west2.compute.internal:8899/kafkacruisecontrol/kafka_cluster_state
+
+>> Actual Movement
+
+curl -X POST 'http://ip-172-31-0-192.us-west2.compute.internal:8899/kafkacruisecontrol/add_broker?brokerid=1546334556&dryrun=false&repli
+cation_throttle=1000000'
+
+>> Check executuion status in Cruise Control
+
+curl -X GET 'http://ip-172-31-0-192.us-west-2.compute.internal:8899/kafkacruisecontrol/user_tasks'
+
+curl -X GET http://ip-172-31-0-192.us-west2.compute.internal:8899/kafkacruisecontrol/kafka_cluster_state
+
+curl -X GET 'http://ip-172-31-0-192.us-west2.compute.internal:8899/kafkacruisecontrol/state?verbose=true'
+
+curl -X GET http://ip-172-31-0-192.us-west2.compute.internal:8899/kafkacruisecontrol/kafka_cluster_state
+
+---** Fixing Offline Replicas **---
+
+>> Kill a Broker Process
+
+>> Check the Broker States
+
+curl -X GET http://ip-172-31-0-192.us-west2.compute.internal:8899/kafkacruisecontrol/kafka_cluster_state
+
+>> Fix the Replicas
+
+curl -X POST 'http://ip-172-31-0-192.us-west2.compute.internal:8899/kafkacruisecontrol/fix_offline_replicas?dryrun=false'
+
+curl -X GET 'http://ip-172-31-0-192.us-west-2.compute.internal:8899/kafkacruisecontrol/user_tasks'
+
+curl -X GET http://ip-172-31-0-192.us-west2.compute.internal:8899/kafkacruisecontrol/kafka_cluster_state
+
+>> Add the broker back and repopulate it
+
+curl -X POST 'http://ip-172-31-0-192.us-west2.compute.internal:8899/kafkacruisecontrol/add_broker?brokerid=1546334431&dryrun=false'
+
+curl -X GET 'http://ip-172-31-0-192.us-west-2.compute.internal:8899/kafkacruisecontrol/user_tasks'
+
+curl -X GET http://ip-172-31-0-192.us-west2.compute.internal:8899/kafkacruisecontrol/kafka_cluster_state
+
+---** Self Healing **---
+
+>> Change Cruise Control Configurations
+
+self.healing.enabled=true
+anomaly.notifier.class=com.linkedin.kafka.cruisecontrol.detector.notifier.SelfHealingNotifier
+
+>> Kill a Broker Process
+
+>> Check the Broker States
+
+curl -X GET http://ip-172-31-0-192.us-west2.compute.internal:8899/kafkacruisecontrol/kafka_cluster_state
+
+>> Check start of self-healing process
+
+curl -X GET 'http://ip-172-31-0-192.us-west2.compute.internal:8899/kafkacruisecontrol/state?substates=executor,anomaly_detector'
